@@ -6,7 +6,7 @@ services:
     plan: free
     region: oregon
     buildCommand: "pip install -e ."
-    startCommand: "python movie_bot/main.py"
+    startCommand: "python -m movie_bot.main"
     envVars:
       - key: BOT_TOKEN
         fromSecret: BOT_TOKEN

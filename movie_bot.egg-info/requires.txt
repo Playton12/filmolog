@@ -1,0 +1,10 @@
+aiogram>=3.10
+python-dotenv
+aiosqlite
+fuzzywuzzy
+python-levenshtein
+
+[dev]
+pytest
+black
+flake8

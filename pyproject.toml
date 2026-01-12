@@ -28,5 +28,5 @@ dev = ["pytest", "black", "flake8"]
 movie-bot = "movie_bot.main:main"
 
 [tool.setuptools.packages.find]
-where = ["."]  # искать в корне
+where = ["."]
 include = ["movie_bot*"]

@@ -1,0 +1,2 @@
+[console_scripts]
+movie-bot = movie_bot.main:main

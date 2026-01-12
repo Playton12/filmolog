@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "movie_bot"
+version = "0.1.0"
+description = "Telegram-бот для управления фильмами и рекомендаций"
+authors = [{name = "You", email = "you@example.com"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram>=3.10",
+    "python-dotenv",
+    "aiosqlite",
+    "fuzzywuzzy",
+    "python-levenshtein"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8"]
+
+[project.scripts]
+movie-bot = "movie_bot.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]  # искать в корне
+include = ["movie_bot*"]

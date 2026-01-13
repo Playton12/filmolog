@@ -2,13 +2,10 @@ services:
   - type: web
     name: filmolog-bot
     runtime: python
-    env: production
     plan: free
     region: oregon
-    buildCommand: "pip install -e ."
-    startCommand: "python -m movie_bot.main"
+    buildCommand: pip install -e .
+    startCommand: python -m movie_bot.main
     envVars:
       - key: BOT_TOKEN
         fromSecret: BOT_TOKEN
-      - key: PYTHONPATH
-        value: .

@@ -1,13 +1,16 @@
 import asyncio
 import logging
+import os
+from threading import Thread
 
 from aiogram import Dispatcher
 
 from movie_bot.bot import bot
 from movie_bot.database.db import init_db
 from movie_bot.utils.logger import setup_logger
+from movie_bot.utils.healthcheck import run_server
 
-# ✅ Правильные абсолютные импорты
+# Импорт роутеров
 from movie_bot.handlers.start import router as start_router
 from movie_bot.handlers.recommend import router as recommend_router
 from movie_bot.handlers.add_movie import router as add_movie_router
@@ -29,6 +32,11 @@ async def main():
     dp.include_router(my_movies_router)
     dp.include_router(watched_router)
     dp.include_router(delete_router)
+
+    # Запускаем health-check сервер в отдельном потоке
+    if os.getenv("RENDER"):
+        thread = Thread(target=run_server, daemon=True)
+        thread.start()
 
     logging.info("Бот запущен")
     await dp.start_polling(bot)

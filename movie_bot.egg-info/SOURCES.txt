@@ -26,5 +26,6 @@ movie_bot/keyboards/genre.py
 movie_bot/keyboards/main_menu.py
 movie_bot/keyboards/utils.py
 movie_bot/utils/__init__.py
+movie_bot/utils/healthcheck.py
 movie_bot/utils/helpers.py
 movie_bot/utils/logger.py

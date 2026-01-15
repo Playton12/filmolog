@@ -20,10 +20,11 @@ async def get_main_menu_with_stats(user_id: int) -> InlineKeyboardMarkup:
     watched_text = f"✅ Просмотрено ({count})" if count > 0 else "✅ Просмотрено"
 
     buttons = [
-        [InlineKeyboardButton(text="🎬 Получить рекомендацию", callback_data="recommend")],
-        [InlineKeyboardButton(text="➕ Добавить фильм", callback_data="add")],
-        [InlineKeyboardButton(text="📂 Мои фильмы", callback_data="my_movies")],
-        [InlineKeyboardButton(text=watched_text, callback_data="watched_list")],
-        [InlineKeyboardButton(text="🗑 Удалить фильм", callback_data="delete_menu")]
-    ]
+    [InlineKeyboardButton(text="🎬 Получить рекомендацию", callback_data="recommend")],
+    [InlineKeyboardButton(text="➕ Добавить фильм", callback_data="add")],
+    [InlineKeyboardButton(text="📂 Мои фильмы", callback_data="my_movies")],
+    [InlineKeyboardButton(text=watched_text, callback_data="watched_list")],
+    [InlineKeyboardButton(text="🗑 Удалить фильм", callback_data="delete_menu")],
+    [InlineKeyboardButton(text="✏️ Редактировать фильм", callback_data="edit_menu")]  # ← добавлено
+]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

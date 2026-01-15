@@ -49,3 +49,24 @@ def get_similar_movies(movies: list, title: str, threshold: int = 75):
             similar.append({"movie": movie, "similarity": similarity})
     similar.sort(key=lambda x: x["similarity"], reverse=True)
     return [item["movie"] for item in similar]
+
+def get_movie_card_text(movie: dict) -> str:
+    """
+    Генерирует красивый текст-карточку фильма.
+
+    :param movie: Словарь с полями фильма (title, genre, description, poster_id, watched)
+    :return: Форматированный текст
+    """
+    title = movie.get("title", "Без названия")
+    genre = movie.get("genre", "Не указан")
+    description = movie.get("description", "Нет описания")
+
+    # Обрезаем описание, если длинное
+    if len(description) > 120:
+        description = description[:117] + "..."
+
+    return (
+        f"🎬 <b>{title}</b>\n"
+        f"🧩 <b>Жанр:</b> {genre}\n"
+        f"📝 <b>Описание:</b> {description}"
+    )

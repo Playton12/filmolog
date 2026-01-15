@@ -17,6 +17,7 @@ from movie_bot.handlers.add_movie import router as add_movie_router
 from movie_bot.handlers.my_movies import router as my_movies_router
 from movie_bot.handlers.watched import router as watched_router
 from movie_bot.handlers.delete import router as delete_router
+from movie_bot.handlers.edit_movie import router as edit_movie_router
 
 
 async def main():
@@ -32,6 +33,7 @@ async def main():
     dp.include_router(my_movies_router)
     dp.include_router(watched_router)
     dp.include_router(delete_router)
+    dp.include_router(edit_movie_router)
 
     # Запускаем health-check сервер в отдельном потоке
     if os.getenv("RENDER"):

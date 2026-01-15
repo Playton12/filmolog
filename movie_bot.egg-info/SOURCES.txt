@@ -17,6 +17,7 @@ movie_bot/fsm/states.py
 movie_bot/handlers/__init__.py
 movie_bot/handlers/add_movie.py
 movie_bot/handlers/delete.py
+movie_bot/handlers/edit_movie.py
 movie_bot/handlers/my_movies.py
 movie_bot/handlers/recommend.py
 movie_bot/handlers/start.py

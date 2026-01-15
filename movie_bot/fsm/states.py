@@ -24,6 +24,7 @@ class EditMovie(StatesGroup):
     genre = State()
     description = State()
     poster = State()
+    confirm = State()  # ← новое состояние
 
 
 class UserStates(StatesGroup):

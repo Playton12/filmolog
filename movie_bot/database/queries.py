@@ -50,6 +50,22 @@ async def get_movies_by_genre(genre: str):
             (genre,)
         ) as cursor:
             return await cursor.fetchall()
+        
+async def get_movie_by_id(user_id: int, movie_id: int):
+    """
+    Возвращает данные одного фильма по ID и пользователю.
+
+    :param user_id: ID пользователя
+    :param movie_id: ID фильма
+    :return: Row с данными фильма или None
+    """
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT id, title, genre, description, poster_id, watched FROM movies WHERE id = ? AND user_id = ?",
+            (movie_id, user_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
 async def add_movie(user_id: int, title: str, genre: str, description: str, poster_id: str = None):
     """
@@ -115,3 +131,22 @@ async def mark_movie_watched(movie_id: int, user_id: int, watched: bool):
             (1 if watched else 0, movie_id, user_id)
         )
         await db.commit()
+
+async def update_movie(user_id: int, movie_id: int, **kwargs):
+    """
+    Обновляет поля фильма.
+
+    :param user_id: ID владельца фильма
+    :param movie_id: ID фильма
+    :param kwargs: Поля для обновления (например, title='Новое название')
+    """
+    if not kwargs:
+        return
+
+    async with get_db() as db:
+        set_clause = ", ".join([f"{key} = ?" for key in kwargs.keys()])
+        query = f"UPDATE movies SET {set_clause} WHERE id = ? AND user_id = ?"
+        params = list(kwargs.values()) + [movie_id, user_id]
+        await db.execute(query, params)
+        await db.commit()
+        logger.info(f"Фильм обновлён: {movie_id} | user_id={user_id} | Изменено: {list(kwargs.keys())}")

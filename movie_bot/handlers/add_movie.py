@@ -24,7 +24,7 @@ from aiogram.fsm.context import FSMContext
 from movie_bot.fsm.states import AddMovie
 from movie_bot.keyboards.genre import get_genre_keyboard
 from movie_bot.keyboards.utils import get_cancel_button, get_back_button, get_skip_poster_button
-from movie_bot.database.queries import add_movie, is_movie_exists
+from movie_bot.database.queries import add_movie, is_movie_exists, get_all_movies
 from movie_bot.utils.helpers import get_similar_movies, clear_and_send
 from movie_bot.keyboards.main_menu import get_main_menu_with_stats
 
@@ -65,7 +65,6 @@ async def add_title(message: Message, state: FSMContext):
     user_input = message.text.strip()
     user_id = message.from_user.id
 
-    from database.queries import get_all_movies
     user_movies = await get_all_movies(user_id=user_id, watched=False)
 
     # Проверка похожих названий

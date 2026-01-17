@@ -48,7 +48,8 @@ async def init_db():
                 genre TEXT NOT NULL,
                 description TEXT,
                 poster_id TEXT,
-                added_at TEXT DEFAULT (datetime('now', 'localtime')),
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                watched_at TIMESTAMP,
                 watched INTEGER DEFAULT 0
             )
             """

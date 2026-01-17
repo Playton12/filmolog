@@ -24,7 +24,12 @@ async def get_all_movies(user_id: int, watched: bool = None, order: str = "id"):
     :return: Список строк (aiosqlite.Row) с данными фильмов
     """
     async with get_db() as db:
-        query = "SELECT id, title, genre, description, poster_id, added_at, watched FROM movies WHERE user_id = ?"
+        query = """
+    SELECT id, title, genre, description, poster_id, 
+           watched, added_at, watched_at 
+    FROM movies 
+    WHERE user_id = ?
+"""
         params = [user_id]
         if watched is not None:
             query += " AND watched = ?"
@@ -54,14 +59,18 @@ async def get_movies_by_genre(genre: str):
 async def get_movie_by_id(user_id: int, movie_id: int):
     """
     Возвращает данные одного фильма по ID и пользователю.
+    Теперь включает даты добавления и просмотра.
 
     :param user_id: ID пользователя
     :param movie_id: ID фильма
-    :return: Row с данными фильма или None
+    :return: Словарь с данными фильма или None
     """
     async with get_db() as db:
         async with db.execute(
-            "SELECT id, title, genre, description, poster_id, watched FROM movies WHERE id = ? AND user_id = ?",
+            """
+            SELECT id, title, genre, description, poster_id, watched, added_at, watched_at
+            FROM movies WHERE id = ? AND user_id = ?
+            """,
             (movie_id, user_id)
         ) as cursor:
             row = await cursor.fetchone()
@@ -79,7 +88,10 @@ async def add_movie(user_id: int, title: str, genre: str, description: str, post
     """
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO movies (user_id, title, genre, description, poster_id) VALUES (?, ?, ?, ?, ?)",
+            """
+            INSERT INTO movies (user_id, title, genre, description, poster_id, added_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
             (user_id, title, genre, description, poster_id)
         )
         await db.commit()
@@ -126,10 +138,24 @@ async def mark_movie_watched(movie_id: int, user_id: int, watched: bool):
     :param watched: True — просмотрен, False — нет
     """
     async with get_db() as db:
-        await db.execute(
-            "UPDATE movies SET watched = ? WHERE id = ? AND user_id = ?",
-            (1 if watched else 0, movie_id, user_id)
-        )
+        if watched:
+            await db.execute(
+                """
+                UPDATE movies
+                SET watched = 1, watched_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND user_id = ?
+                """,
+                (movie_id, user_id)
+            )
+        else:
+            await db.execute(
+                """
+                UPDATE movies
+                SET watched = 0, watched_at = NULL
+                WHERE id = ? AND user_id = ?
+                """,
+                (movie_id, user_id)
+            )
         await db.commit()
 
 async def update_movie(user_id: int, movie_id: int, **kwargs):

@@ -24,9 +24,15 @@ class EditMovie(StatesGroup):
     genre = State()
     description = State()
     poster = State()
-    confirm = State()  # ← новое состояние
+    confirm = State()
 
 
 class UserStates(StatesGroup):
     """Глобальные состояния пользователя."""
     started = State()
+
+
+class MyMovies(StatesGroup):
+    """Состояния для просмотра своих фильмов."""
+    search = State()
+    pagination = State()  # Для будущих улучшений

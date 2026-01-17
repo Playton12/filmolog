@@ -18,8 +18,10 @@ movie_bot/handlers/__init__.py
 movie_bot/handlers/add_movie.py
 movie_bot/handlers/delete.py
 movie_bot/handlers/edit_movie.py
+movie_bot/handlers/help.py
 movie_bot/handlers/my_movies.py
 movie_bot/handlers/recommend.py
+movie_bot/handlers/restart.py
 movie_bot/handlers/start.py
 movie_bot/handlers/watched.py
 movie_bot/keyboards/__init__.py
@@ -27,6 +29,8 @@ movie_bot/keyboards/genre.py
 movie_bot/keyboards/main_menu.py
 movie_bot/keyboards/utils.py
 movie_bot/utils/__init__.py
+movie_bot/utils/commands.py
 movie_bot/utils/healthcheck.py
 movie_bot/utils/helpers.py
 movie_bot/utils/logger.py
+movie_bot/utils/pagination.py

@@ -43,7 +43,7 @@ async def recommend_by_genre(callback: CallbackQuery):
 
     movies = await get_movies_by_genre(genre)
     if not movies:
-        text = f"🤷‍♂️ В жанре *{genre}* нет доступных фильмов (все просмотрены)."
+        text = f"🤷‍♂️ В жанре *{genre}* пусто."
         keyboard = await get_main_menu_with_stats(callback.from_user.id)
         await clear_and_send(callback.message, text, keyboard, parse_mode="Markdown")
         return

@@ -34,9 +34,9 @@ async def add_movie_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddMovie.title)
     await state.update_data(step=1)
     text = (
-        "🎬 <b>Добавление фильма</b>\n\n"
+        "🎬 Добавление фильма\n\n"
         "📌 Напишите название фильма.\n\n"
-        "🔖 <i>Шаг 1 из 4</i>"
+        "🔖 Шаг 1 из 4"
     )
     await clear_and_send(callback.message, text, get_cancel_button(), parse_mode="HTML")
     await callback.answer()
@@ -62,7 +62,7 @@ async def add_title(message: Message, state: FSMContext):
     if best_match:
         await state.update_data(title=user_input)
         await message.answer(
-            f"🔍 Возможно, вы имели в виду: <b>{best_match}</b>?\n\n"
+            f"🔍 Возможно, вы имели в виду: {best_match}?\n\n"
             f"Вы написали: <i>{user_input}</i>\n\n"
             "Исправить?",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -90,8 +90,8 @@ async def add_title(message: Message, state: FSMContext):
     await state.update_data(title=user_input, step=2)
     await state.set_state(AddMovie.genre)
     await message.answer(
-        "🎭 <b>Выберите жанр</b>\n\n"
-        "🔖 <i>Шаг 2 из 4</i>",
+        "🎭 Выберите жанр\n\n"
+        "🔖 Шаг 2 из 4",
         reply_markup=get_genre_with_navigation()
     )
 
@@ -103,7 +103,7 @@ async def auto_correct_title(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddMovie.genre)
     await clear_and_send(
         callback.message,
-        "🎭 <b>Выберите жанр</b>\n\n🔖 <i>Шаг 2 из 4</i>",
+        "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
         get_genre_with_navigation(),
         parse_mode="HTML"
     )
@@ -117,7 +117,7 @@ async def auto_skip_correction(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddMovie.genre)
     await clear_and_send(
         callback.message,
-        "🎭 <b>Выберите жанр</b>\n\n🔖 <i>Шаг 2 из 4</i>",
+        "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
         get_genre_with_navigation(),
         parse_mode="HTML"
     )
@@ -131,7 +131,7 @@ async def add_genre_callback(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AddMovie.description)
     await clear_and_send(
         callback.message,
-        "📝 <b>Напишите описание</b>\n\n🔖 <i>Шаг 3 из 4</i>",
+        "📝 Напишите описание\n\n🔖 Шаг 3 из 4",
         get_back_button(),
         parse_mode="HTML"
     )
@@ -147,7 +147,7 @@ async def back_to_previous_field(callback: CallbackQuery, state: FSMContext):
         await state.set_state(AddMovie.genre)
         await clear_and_send(
             callback.message,
-            "🎭 <b>Выберите жанр</b>\n\n🔖 <i>Шаг 2 из 4</i>",
+            "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
             get_genre_with_navigation(),
             parse_mode="HTML"
         )
@@ -155,7 +155,7 @@ async def back_to_previous_field(callback: CallbackQuery, state: FSMContext):
         await state.set_state(AddMovie.title)
         await clear_and_send(
             callback.message,
-            "🎬 <b>Введите название фильма</b>\n\n🔖 <i>Шаг 1 из 4</i>",
+            "🎬 Введите название фильма\n\n🔖 Шаг 1 из 4",
             get_cancel_button(),
             parse_mode="HTML"
         )
@@ -163,7 +163,7 @@ async def back_to_previous_field(callback: CallbackQuery, state: FSMContext):
         await state.set_state(AddMovie.description)
         await clear_and_send(
             callback.message,
-            "📝 <b>Напишите описание</b>\n\n🔖 <i>Шаг 3 из 4</i>",
+            "📝 Напишите описание\n\n🔖Шаг 3 из 4",
             get_back_button(),
             parse_mode="HTML"
         )
@@ -181,7 +181,7 @@ async def add_description(message: Message, state: FSMContext):
     await state.update_data(description=message.text.strip(), step=4)
     await state.set_state(AddMovie.poster)
     await message.answer(
-        "🖼 <b>Пришлите постер</b> или нажмите «Пропустить»\n\n🔖 <i>Шаг 4 из 4</i>",
+        "🖼 Пришлите постер или нажмите «Пропустить»\n\n🔖 Шаг 4 из 4",
         reply_markup=get_skip_poster_button()
     )
 
@@ -198,7 +198,7 @@ async def add_poster_photo(message: Message, state: FSMContext):
     )
     await state.clear()
     keyboard = await get_main_menu_with_stats(message.from_user.id)
-    await message.answer("🎉 <b>Фильм успешно добавлен!</b>", reply_markup=keyboard, parse_mode="HTML")
+    await message.answer("🎉 Фильм успешно добавлен!", reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.callback_query(AddMovie.poster, F.data == "skip_poster")
@@ -213,7 +213,7 @@ async def skip_poster(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await clear_and_send(
         callback.message,
-        "🎉 <b>Фильм успешно добавлен!</b>",
+        "🎉 Фильм успешно добавлен!",
         await get_main_menu_with_stats(callback.from_user.id),
         parse_mode="HTML"
     )

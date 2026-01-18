@@ -33,7 +33,7 @@ async def get_main_menu_with_stats(user_id: int) -> InlineKeyboardMarkup:
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Добавить", callback_data="add")],
-        [InlineKeyboardButton(text="🎯 Рекомендация", callback_data="recommend")],
+        [InlineKeyboardButton(text="🎯 Рекомендаии", callback_data="recommend")],
         [InlineKeyboardButton(text="📂 Мой контент", callback_data="my_movies")],
         [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
     ])

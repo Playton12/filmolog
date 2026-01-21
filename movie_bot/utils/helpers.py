@@ -1,107 +1,112 @@
-"""
-Вспомогательные функции.
-"""
-
+from typing import List, Union, Optional
+from aiogram import Bot
 from aiogram.types import Message, CallbackQuery
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import (
+    TelegramForbiddenError,
+    TelegramBadRequest  # ← Единственное исключение, которое нужно
+)
 from fuzzywuzzy import fuzz
-from datetime import datetime
 import logging
 
-async def clear_and_send(message_or_callback, text: str, reply_markup=None, parse_mode=None):
+logger = logging.getLogger(__name__)
+
+
+async def clear_and_send(
+    event: Union[Message, CallbackQuery, Bot],
+    text: str,
+    reply_markup=None,
+    parse_mode: Optional[str] = None
+):
     """
     Универсально удаляет предыдущее сообщение и отправляет новое.
-    Работает с Message и CallbackQuery.
+    Обрабатывает:
+    - Сообщение уже удалено
+    - Flood limit (Too Many Requests)
+    - Пользователь заблокировал бота
     """
-    bot = None
-    chat_id = None
+    bot: Optional[Bot] = None
+    chat_id: Optional[int] = None
+    message_to_delete: Optional[Message] = None
 
     try:
-        if isinstance(message_or_callback, CallbackQuery):
-            msg = message_or_callback.message
-            bot = msg.bot
-            chat_id = msg.chat.id
-            await msg.delete()
-            await msg.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
-        elif isinstance(message_or_callback, Message):
-            bot = message_or_callback.bot
-            chat_id = message_or_callback.chat.id
-            await message_or_callback.delete()
-            await message_or_callback.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+        if isinstance(event, CallbackQuery):
+            message_to_delete = event.message
+            bot = message_to_delete.bot
+            chat_id = message_to_delete.chat.id
+        elif isinstance(event, Message):
+            message_to_delete = event
+            bot = event.bot
+            chat_id = event.chat.id
+        elif isinstance(event, Bot):
+            # Режим: просто отправить (например, из health-check)
+            logger.warning("clear_and_send получил Bot — удаление невозможно")
+            return
         else:
-            bot = message_or_callback.bot
-            chat_id = message_or_callback.from_user.id
-            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
+            return
+
+        # Попытка удалить сообщение
+        if message_to_delete:
+            try:
+                await message_to_delete.delete()
+            except TelegramBadRequest as e:
+                error_msg = str(e).lower()
+                if "message to delete not found" in error_msg:
+                    pass  # Нормально — сообщение уже удалено
+                elif "message can't be deleted" in error_msg:
+                    pass  # Бот не может удалить (например, старое сообщение)
+                else:
+                    logger.debug(f"[clear_and_send] Неизвестная ошибка удаления: {e}")
+
+        # Отправка нового сообщения
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+
+    except TelegramForbiddenError:
+        # Пользователь заблокировал бота
+        logger.debug(f"Бот заблокирован пользователем {chat_id}")
+        pass
+    except TelegramBadRequest as e:
+        error_msg = str(e).lower()
+        if "retry after" in error_msg:
+            # Flood control: Too Many Requests
+            logger.warning(f"Flood limit: попробуйте позже — {e}")
+            # В продакшене можно поставить sleep, но здесь — просто игнор
+        elif "message is too long" in error_msg:
+            logger.error("Сообщение слишком длинное")
+        else:
+            logger.error(f"TelegramBadRequest при отправке: {e}")
     except Exception as e:
-        logging.warning(f"[clear_and_send] Ошибка: {e}")
+        logger.error(f"Неизвестная ошибка в clear_and_send: {e}", exc_info=True)
+        # Фолбэк — редкий случай
         try:
-            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
-        except Exception as e2:
-            logging.error(f"[clear_and_send] Фатальная ошибка: {e2}")
+            if bot and chat_id:
+                await bot.send_message(chat_id, "🔄 Повторная попытка...")
+        except:
+            pass
 
 
-def get_similar_movies(movies: list, title: str, threshold: int = 75):
+
+def get_similar_movies(movies, query: str, threshold: int = 75) -> List[str]:
     """
-    Находит фильмы с похожими названиями с помощью fuzzy-поиска.
+    Возвращает список похожих названий фильмов с помощью fuzzy-поиска.
+
+    :param movies: Список фильмов с полем 'title'
+    :param query: Поисковый запрос
+    :param threshold: Порог схожести (0–100)
+    :return: Список названий, отсортированных по релевантности
     """
-    similar = []
+    query = query.lower().strip()
+    matches = []
+
     for movie in movies:
-        ratio1 = fuzz.ratio(title.lower(), movie["title"].lower())
-        ratio2 = fuzz.token_sort_ratio(title.lower(), movie["title"].lower())
-        similarity = max(ratio1, ratio2)
-        if threshold <= similarity < 100:
-            similar.append({"movie": movie, "similarity": similarity})
-    similar.sort(key=lambda x: x["similarity"], reverse=True)
-    return [item["movie"]["title"] for item in similar]
+        title = str(movie["title"]).lower().strip()
+        similarity = fuzz.ratio(query, title)
+        if similarity >= threshold:
+            matches.append(movie["title"])  # Сохраняем оригинальное название
 
-
-def format_date(iso_date: str) -> str:
-    """
-    Форматирует ISO-дату в читаемый вид: 17.01.2025
-    """
-    if not iso_date:
-        return "—"
-    try:
-        dt = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
-        return dt.strftime("%d.%m.%Y")
-    except:
-        return "ошибка даты"
-
-
-def get_movie_card_text(movie: dict) -> str:
-    """
-    Возвращает красиво отформатированную карточку фильма.
-    """
-    lines = []
-
-    # 🎬 Заголовок
-    lines.append(f"🎬 <b>{movie['title']}</b>")
-    lines.append("")
-
-    # 🎭 Жанр
-    lines.append(f"🎭 <b>Жанр:</b> <i>{movie['genre']}</i>")
-    lines.append("")
-
-    # 📝 Описание
-    description = movie["description"] or "Описание отсутствует."
-    if len(description) > 200:
-        description = description[:197] + "..."
-    lines.append(f"📝 <b>Описание:</b>")
-    lines.append(f"<i>{description}</i>")
-    lines.append("")
-
-    # 📅 Даты
-    added_at = movie.get("added_at")
-    watched_at = movie.get("watched_at")
-    watched = movie["watched"]
-
-    lines.append(f"📌 <b>Добавлен:</b> <i>{format_date(added_at)}</i>")
-
-    if watched and watched_at:
-        lines.append(f"✅ <b>Просмотрен:</b> <i>{format_date(watched_at)}</i>")
-    elif watched:
-        lines.append("✅ <b>Просмотрен:</b> <i>Дата неизвестна</i>")
-    else:
-        lines.append("⭕ <b>Статус:</b> <i>не просмотрен</i>")
-
-    return "\n".join(lines)
+    # Сортируем по убыванию схожести
+    return sorted(matches, key=lambda x: -fuzz.ratio(query, x.lower()))

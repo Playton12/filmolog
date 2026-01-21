@@ -1,16 +1,23 @@
-from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram import Router, F
+"""
+Обработчики редактирования фильма.
+Теперь с использованием KeyboardFactory, TextBuilder и единым стилем.
+"""
 
-from movie_bot.handlers.my_movies import send_movie_card
-from movie_bot.fsm.states import EditMovie
-from movie_bot.keyboards.genre import get_genre_keyboard, GENRES
-from movie_bot.keyboards.utils import get_skip_poster_edit_button, get_back_edit_button
-from movie_bot.database.queries import get_all_movies, get_movie_by_id, update_movie
-from movie_bot.utils.helpers import get_similar_movies, clear_and_send, get_movie_card_text
+import logging
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+
+from movie_bot.fsm import EditMovie  
+from movie_bot.keyboards.factory import KeyboardFactory
+from movie_bot.database import get_movie_by_id, update_movie, get_all_movies 
+from movie_bot.utils.helpers import get_similar_movies, clear_and_send
 from movie_bot.keyboards.main_menu import get_main_menu_with_stats
+from movie_bot.utils.text_builder import TextBuilder
+from movie_bot.keyboards.factory import KeyboardFactory
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # --- Отображение полей и иконки ---
 FIELD_DISPLAY = {
@@ -27,7 +34,6 @@ FIELD_ICONS = {
     "poster_id": "🖼"
 }
 
-
 @router.callback_query(F.data.startswith("edit_select:"))
 async def edit_select_movie(callback: CallbackQuery, state: FSMContext):
     try:
@@ -35,57 +41,73 @@ async def edit_select_movie(callback: CallbackQuery, state: FSMContext):
         user_id = callback.from_user.id
         movie = await get_movie_by_id(user_id, movie_id)
         if not movie:
-            await callback.message.answer("❌ Фильм не найден.")
+            await callback.answer("❌ Фильм не найден.", show_alert=True)
             return
 
-        await state.update_data(movie_id=movie_id, movie=movie)
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Название", callback_data="edit_field:title")],
-            [InlineKeyboardButton(text="🎭 Жанр", callback_data="edit_field:genre")],
-            [InlineKeyboardButton(text="📄 Описание", callback_data="edit_field:description")],
-            [InlineKeyboardButton(text="🖼 Постер", callback_data="edit_field:poster")],
-            [InlineKeyboardButton(text="✅ Готово", callback_data="edit_done")],
-        ])
-
+        await state.update_data(movie_id=movie_id, movie=dict(movie))
         await clear_and_send(
             callback.message,
-            "🔧 Выберите поле для редактирования:\n\n" + get_movie_card_text(movie),
-            keyboard,
+            f"🔧 Редактирование: <b>{movie['title']}</b>\n\nВыберите поле:",
+            KeyboardFactory.edit_menu(),
             parse_mode="HTML"
         )
         await state.set_state(EditMovie.title)
         await callback.answer()
     except Exception as e:
-        await callback.message.answer(f"⚠️ Ошибка: {e}")
+        logger.error(f"[edit_movie] Ошибка при выборе фильма: {e}")
+        await callback.message.answer("❌ Ошибка при открытии редактирования.")
         await state.clear()
 
 
 @router.callback_query(EditMovie.title, F.data.startswith("edit_field:"))
 async def edit_choose_field(callback: CallbackQuery, state: FSMContext):
-    field = callback.data.split(":")[1]
+    field = callback.data.split(":", 1)[1]
+    if field not in FIELD_DISPLAY:
+        await callback.answer("❌ Неизвестное поле.", show_alert=True)
+        return
+
     await state.update_data(edit_field=field)
 
     match field:
         case "title":
             await state.set_state(EditMovie.title)
-            await clear_and_send(callback.message, f"✏️ Введите новое {FIELD_DISPLAY[field]}:", get_back_edit_button())
+            await clear_and_send(
+                callback.message,
+                TextBuilder.edit_enter_new_value("название"),
+                KeyboardFactory.back_edit(),
+                parse_mode="HTML"
+            )
         case "genre":
             await state.set_state(EditMovie.genre)
-            await clear_and_send(callback.message, "🎭 Выберите новый жанр", get_genre_keyboard("edit"))
+            await clear_and_send(
+                callback.message,
+                "🎭 Выберите новый жанр",
+                KeyboardFactory.genre("edit"),
+                parse_mode="HTML"
+            )
         case "description":
             await state.set_state(EditMovie.description)
-            await clear_and_send(callback.message, f"✏️ Введите новое {FIELD_DISPLAY[field]}:", get_back_edit_button())
-        case "poster":
+            await clear_and_send(
+                callback.message,
+                TextBuilder.edit_enter_new_value("описание"),
+                KeyboardFactory.back_edit(),
+                parse_mode="HTML"
+            )
+        case "poster_id":
             await state.set_state(EditMovie.poster)
-            await clear_and_send(callback.message, "🖼 Пришлите фото постера или выберите «Без постера»", get_skip_poster_edit_button())
+            await clear_and_send(
+                callback.message,
+                "🖼 Пришлите новый постер или нажмите «Пропустить»",
+                KeyboardFactory.skip_poster_edit(),
+                parse_mode="HTML"
+            )
     await callback.answer()
 
 
 @router.message(EditMovie.title)
 async def edit_title(message: Message, state: FSMContext):
     if not message.text or not message.text.strip():
-        await message.answer("❌ Название не может быть пустым.", reply_markup=get_back_edit_button())
+        await message.answer(TextBuilder.err_title_empty(), reply_markup=KeyboardFactory.back_edit())
         return
 
     user_input = message.text.strip()
@@ -96,22 +118,23 @@ async def edit_title(message: Message, state: FSMContext):
     current_title = movie["title"]
 
     if user_input.lower() == current_title.lower():
-        await message.answer("⚠️ Новое название совпадает с текущим.", reply_markup=get_back_edit_button())
+        await message.answer("⚠️ Новое название совпадает с текущим.", reply_markup=KeyboardFactory.back_edit())
         return
 
-    user_movies = await get_all_movies(user_id=user_id, watched=False)
+    user_movies = await get_all_movies(user_id=user_id, watched=None)
     similar_list = get_similar_movies(user_movies, user_input, threshold=75)
     best_match = similar_list[0] if similar_list else None
 
     if best_match and user_input.lower() != best_match.lower():
         await state.update_data(new_title=user_input)
+        kb = KeyboardFactory.confirmation(
+            yes_callback=f"edit_correct:{best_match}",
+            no_callback="edit_skip_correct"
+        )
         await message.answer(
-            f"🔍 Возможно, вы имели в виду: *{best_match}*?\n\nВы написали: *{user_input}*\n\nИсправить?",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Да", callback_data=f"edit_correct:{best_match}")],
-                [InlineKeyboardButton(text="❌ Нет", callback_data="edit_skip_correct")],
-            ]),
-            parse_mode="Markdown"
+            TextBuilder.suggest_correction(input=user_input, match=best_match),
+            reply_markup=kb,
+            parse_mode="HTML"
         )
         return
 
@@ -141,6 +164,7 @@ async def edit_skip_correction(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(EditMovie.genre, F.data.startswith("edit_genre:"))
 async def edit_genre(callback: CallbackQuery, state: FSMContext):
     new_genre = callback.data.split(":", 1)[1]
+    from movie_bot.keyboards.genre import GENRES  # ✅ Локальный импорт
     if new_genre not in GENRES:
         await callback.answer("❌ Некорректный жанр.", show_alert=True)
         return
@@ -151,7 +175,7 @@ async def edit_genre(callback: CallbackQuery, state: FSMContext):
 @router.message(EditMovie.description)
 async def edit_description(message: Message, state: FSMContext):
     if not message.text or not message.text.strip():
-        await message.answer("❌ Описание не может быть пустым.", reply_markup=get_back_edit_button())
+        await message.answer(TextBuilder.err_description_empty(), reply_markup=KeyboardFactory.back_edit())
         return
     await ask_edit_confirmation(message, state, "description", message.text.strip())
 
@@ -166,7 +190,8 @@ async def edit_poster_photo(message: Message, state: FSMContext):
 async def edit_skip_poster(callback: CallbackQuery, state: FSMContext):
     await ask_edit_confirmation(callback, state, "poster_id", None)
     await callback.answer()
-    
+
+
 @router.callback_query(F.data == "back_to_edit")
 async def back_to_edit_fields(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -177,18 +202,12 @@ async def back_to_edit_fields(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📝 Название", callback_data="edit_field:title")],
-        [InlineKeyboardButton(text="🎭 Жанр", callback_data="edit_field:genre")],
-        [InlineKeyboardButton(text="📄 Описание", callback_data="edit_field:description")],
-        [InlineKeyboardButton(text="🖼 Постер", callback_data="edit_field:poster")],
-        [InlineKeyboardButton(text="✅ Готово", callback_data="edit_done")],
-    ])
-
+    # ✅ Исправлено: KeyboardFactory.edit_menu()
     await clear_and_send(
         callback.message,
-        "🔧 Выберите поле для редактирования:\n\n" + get_movie_card_text(movie),
-        keyboard,
+        f"🔧 Редактирование: <b>{movie['title']}</b>\n\nВыберите поле:",
+        KeyboardFactory.edit_menu()
+,
         parse_mode="HTML"
     )
     await state.set_state(EditMovie.title)
@@ -197,94 +216,55 @@ async def back_to_edit_fields(callback: CallbackQuery, state: FSMContext):
 
 async def ask_edit_confirmation(message_or_callback, state: FSMContext, field: str, new_value):
     if isinstance(message_or_callback, CallbackQuery):
-        from_user = message_or_callback.from_user
         message = message_or_callback.message
-        bot = message_or_callback.bot
-    elif isinstance(message_or_callback, Message):
-        from_user = message_or_callback.from_user
-        message = message_or_callback
-        bot = message_or_callback.bot
+        user_id = message_or_callback.from_user.id
     else:
-        await state.clear()
-        return
-
-    user_id = from_user.id
-
-    if from_user.is_bot:
-        print(f"[SECURITY] Бот (ID: {user_id}) пытается редактировать фильм")
-        try:
-            await message_or_callback.answer("❌ Действие недоступно для ботов.")
-        except:
-            pass
-        return
+        message = message_or_callback
+        user_id = message_or_callback.from_user.id
 
     data = await state.get_data()
     movie_id = data.get("movie_id")
     if not movie_id:
-        await clear_and_send(
-            message_or_callback,
-            "❌ Сессия устарела. Начните сначала.",
-            await get_main_menu_with_stats(user_id)
-        )
-        await state.clear()
-        return
-
-    try:
-        movie_id = int(movie_id)
-    except (ValueError, TypeError):
-        await clear_and_send(
-            message_or_callback,
-            "❌ Некорректный ID фильма.",
-            await get_main_menu_with_stats(user_id)
-        )
+        await clear_and_send(message, "❌ Сессия устарела.", (await get_main_menu_with_stats(user_id))[1])
         await state.clear()
         return
 
     movie = await get_movie_by_id(user_id, movie_id)
     if not movie:
-        await clear_and_send(
-            message_or_callback,
-            "❌ Фильм не найден.",
-            await get_main_menu_with_stats(user_id)
-        )
+        await clear_and_send(message, "❌ Фильм не найден.", (await get_main_menu_with_stats(user_id))[1])
         await state.clear()
         return
 
-    def format_value(val, fld: str):
-        if fld == "poster_id":
+    def format_value(val):
+        if field == "poster_id":
             return "🖼 Есть" if val else "❌ Нет"
-        return str(val) if val else "❓ Не задано"
+        return str(val) if val else "❌ Пусто"
 
-    old_value = movie.get(field)
-    old_display = format_value(old_value, field)
-    new_display = format_value(new_value, field)
+    old_display = format_value(movie.get(field))
+    new_display = format_value(new_value)
     field_name = FIELD_DISPLAY[field]
-    icon = FIELD_ICONS.get(field, "🔧")
+    icon = FIELD_ICONS[field]
 
-    text = (
-        f"{icon} *Подтвердите изменение*\n\n"
-        f"🗂 Поле: *{field_name}*\n"
-        f"🔄 Старое: `{old_display}`\n"
-        f"✅ Новое: `{new_display}`\n\n"
-        f"Сохранить изменения?"
+    text = TextBuilder.confirm_edit_field(
+        field_name=field_name,
+        icon=icon,
+        old_value=old_display,
+        new_value=new_display
     )
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, сохранить", callback_data="confirm_edit:yes")],
-        [InlineKeyboardButton(text="⬅️ Нет, назад", callback_data="confirm_edit:no")]
-    ])
+    kb = KeyboardFactory.confirmation(
+        yes_callback="confirm_edit:yes",
+        no_callback="confirm_edit:no"
+    )
 
     try:
         if isinstance(message_or_callback, CallbackQuery):
-            await message.edit_text(text, reply_markup=keyboard, parse_mode="Markdown")
+            await message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         else:
-            await message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+            await message.answer(text, reply_markup=kb, parse_mode="HTML")
     except Exception as e:
-        error_msg = "✉️ Чтобы продолжить, напишите боту в личку: [открыть](t.me/ваш_бот) \n\nПосле — нажмите /start"
-        try:
-            await bot.send_message(user_id, error_msg, disable_web_page_preview=True)
-        except:
-            pass
+        logger.error(f"[edit_movie] Ошибка отправки подтверждения: {e}")
+        await message.answer("❌ Ошибка интерфейса. Начните сначала.")
         await state.clear()
         return
 
@@ -292,117 +272,79 @@ async def ask_edit_confirmation(message_or_callback, state: FSMContext, field: s
         pending_edit={
             "field": field,
             "value": new_value,
+            "field_name": field_name,
             "old_display": old_display,
-            "new_display": new_display,
-            "field_name": field_name
+            "new_display": new_display
         }
     )
     await state.set_state(EditMovie.confirm)
 
-
 @router.callback_query(EditMovie.confirm, F.data == "confirm_edit:yes")
 async def confirm_edit_yes(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    pending = data.get("pending_edit")
+    pending = data["pending_edit"]
     movie_id = data["movie_id"]
     user_id = callback.from_user.id
 
-    if not pending:
-        await callback.message.answer("❌ Ошибка: нет данных для сохранения.")
+    try:
+        await update_movie(user_id, movie_id, **{pending["field"]: pending["value"]})
+        logger.info(f"Пользователь {user_id} обновил поле '{pending['field']}' фильма {movie_id}")
+    except Exception as e:
+        logger.error(f"[edit] Ошибка при обновлении фильма {movie_id}: {e}")
+        await callback.message.answer("❌ Ошибка при сохранении.")
         await state.clear()
         return
-
-    field, new_value = pending["field"], pending["value"]
-    await update_movie(user_id, movie_id, **{field: new_value})
 
     movie = await get_movie_by_id(user_id, movie_id)
     if not movie:
-        await clear_and_send(callback.message, "❌ Фильм не найден.", await get_main_menu_with_stats(user_id))
+        await clear_and_send(callback.message, "❌ Фильм не найден.", (await get_main_menu_with_stats(user_id))[1])
         await state.clear()
         return
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📝 Название", callback_data="edit_field:title")],
-        [InlineKeyboardButton(text="🎭 Жанр", callback_data="edit_field:genre")],
-        [InlineKeyboardButton(text="📄 Описание", callback_data="edit_field:description")],
-        [InlineKeyboardButton(text="🖼 Постер", callback_data="edit_field:poster")],
-        [InlineKeyboardButton(text="✅ Готово", callback_data="edit_done")],
-    ])
-
-    change_text = (
-        f"✅ *Поле обновлено*\n\n"
-        f"🗂 {pending['field_name']}:\n"
-        f"➡️ `{pending['old_display']}` → `{pending['new_display']}`\n\n"
-    )
+    text = TextBuilder.success_edit_field(
+        field_name=pending["field_name"],
+        old_value=pending["old_display"],
+        new_value=pending["new_display"]
+    ) + "\n\n" + TextBuilder.movie_card(movie)
 
     await clear_and_send(
         callback.message,
-        change_text + get_movie_card_text(movie),
-        keyboard,
+        text,
+        KeyboardFactory.edit_menu(),
         parse_mode="HTML"
     )
     await state.set_state(EditMovie.title)
     await callback.answer()
 
 
-@router.callback_query(F.data == "edit_done")
-async def edit_done(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    movie_id = data.get("movie_id")
-    user_id = callback.from_user.id
-
-    if not movie_id:
-        await clear_and_send(
-            callback.message,
-            "❌ Сессия устарела.",
-            await get_main_menu_with_stats(user_id)
-        )
-        await state.clear()
-        await callback.answer()
-        return
-
-    # Проверим, что фильм существует
-    movie = await get_movie_by_id(user_id, movie_id)
-    if not movie:
-        await clear_and_send(
-            callback.message,
-            "❌ Фильм не найден.",
-            await get_main_menu_with_stats(user_id)
-        )
-        await state.clear()
-        await callback.answer()
-        return
-
-    # Очищаем FSM
-    await state.clear()
-
-    # Показываем карточку фильма
-    await send_movie_card(callback, movie_id)  # ✅ Вызываем универсальную функцию
-
-    # Уже внутри send_movie_card будет callback.answer()
-
-
-
 @router.callback_query(EditMovie.confirm, F.data == "confirm_edit:no")
 async def confirm_edit_no(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    movie_id = data["movie_id"]
-    user_id = callback.from_user.id
-    movie = await get_movie_by_id(user_id, movie_id)
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📝 Название", callback_data="edit_field:title")],
-        [InlineKeyboardButton(text="🎭 Жанр", callback_data="edit_field:genre")],
-        [InlineKeyboardButton(text="📄 Описание", callback_data="edit_field:description")],
-        [InlineKeyboardButton(text="🖼 Постер", callback_data="edit_field:poster")],
-        [InlineKeyboardButton(text="✅ Готово", callback_data="edit_done")],
-    ])
-
-    await clear_and_send(
-        callback.message,
-        "❌ Изменение отменено.\n\n" + get_movie_card_text(movie),
-        keyboard,
-        parse_mode="HTML"
-    )
+    movie = await get_movie_by_id(callback.from_user.id, data["movie_id"])
+    text = "❌ Изменение отменено.\n\n" + TextBuilder.movie_card(movie)
+    await clear_and_send(callback.message, text, KeyboardFactory.edit_menu()
+, parse_mode="HTML")
     await state.set_state(EditMovie.title)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_done")
+async def edit_done(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    data = await state.get_data()
+    movie = await get_movie_by_id(user_id, data["movie_id"])
+
+    if not movie:
+        await clear_and_send(callback.message, "❌ Фильм не найден.", (await get_main_menu_with_stats(user_id))[1])
+        await state.clear()
+        await callback.answer()
+        return
+
+    await state.clear()
+
+    # ✅ Исправлено: TextBuilder.movie_card
+    text = "✅ Редактирование завершено.\n\n" + TextBuilder.movie_card(movie)
+    keyboard = (await get_main_menu_with_stats(user_id))[1]
+
+    await clear_and_send(callback.message, text, keyboard, parse_mode="HTML")
     await callback.answer()

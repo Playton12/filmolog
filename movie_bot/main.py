@@ -1,58 +1,118 @@
+"""
+Точка входа в бота.
+
+Задачи:
+- Настройка логирования
+- Инициализация базы данных
+- Регистрация обработчиков (авто-загрузка)
+- Установка команд
+- Запуск поллинга
+- Поддержка Render.com (health-check)
+- Graceful shutdown
+"""
+
 import asyncio
 import logging
 import os
+import signal
+import sys
+from pathlib import Path
 from threading import Thread
-
 from aiogram import Dispatcher
 
 from movie_bot.bot import bot
 from movie_bot.database.db import init_db
-from movie_bot.utils.logger import setup_logger
-from movie_bot.utils.healthcheck import run_server
+from movie_bot.utils.logger import get_logger
+from movie_bot.utils.healthcheck import run_health_server, stop_health_server
+from movie_bot.commands import get_commands
 
-# Импорт роутеров
-from movie_bot.handlers.start import router as start_router
-from movie_bot.handlers.restart import router as restart_router
-from movie_bot.handlers.recommend import router as recommend_router
-from movie_bot.handlers.add_movie import router as add_movie_router
-from movie_bot.handlers.my_movies import router as my_movies_router
-from movie_bot.handlers.watched import router as watched_router
-from movie_bot.handlers.delete import router as delete_router
-from movie_bot.handlers.edit_movie import router as edit_movie_router
-from movie_bot.handlers.help import router as help_router
+# --- Настройка логгера ---
+logger = get_logger(__name__)
 
-# Импорт команд
-from movie_bot.utils.commands import get_commands
+
+def load_routers(dp: Dispatcher):
+    """
+    Автоматически импортирует и подключает все роутеры из movie_bot.handlers.
+    Ожидается, что каждый файл содержит переменную `router`.
+    """
+    handlers_dir = Path(__file__).parent / "handlers"
+    for file in handlers_dir.glob("*.py"):
+        if file.name.startswith("__"):
+            continue
+
+        module_name = file.stem
+        try:
+            module = __import__(f"movie_bot.handlers.{module_name}", fromlist=["router"])
+            if hasattr(module, "router"):
+                dp.include_router(module.router)
+                logger.info(f"✅ Подключён роутер: {module_name}")
+            else:
+                logger.warning(f"⚠️ Роутер не найден в модуле: {module_name}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при загрузке {module_name}: {e}")
 
 
 async def main():
-    setup_logger()
-    await init_db()
+    """
+    Основная асинхронная функция запуска бота.
+    """
+    logger.info("🚀 Запуск бота...")
+    logger.info(f"📍 Версия Python: {sys.version}")
+    logger.info(f"📍 Рабочая директория: {os.getcwd()}")
 
+    # Инициализация БД
+    try:
+        await init_db()
+        logger.info("✅ База данных инициализирована")
+    except Exception as e:
+        logger.critical(f"❌ Не удалось инициализировать БД: {e}", exc_info=True)
+        sys.exit(1)
+
+    # Создаём диспетчер
     dp = Dispatcher()
 
     # Подключаем роутеры
-    dp.include_router(start_router)
-    dp.include_router(restart_router)
-    dp.include_router(recommend_router)
-    dp.include_router(edit_movie_router)
-    dp.include_router(add_movie_router)
-    dp.include_router(my_movies_router)
-    dp.include_router(watched_router)
-    dp.include_router(delete_router)
-    dp.include_router(help_router)
+    load_routers(dp)
+    logger.info("✅ Все обработчики загружены")
 
     # Устанавливаем команды
-    await bot.set_my_commands(get_commands())  # ✅ Чисто и понятно
+    try:
+        await bot.set_my_commands(get_commands())
+        logger.info("✅ Команды бота установлены")
+    except Exception as e:
+        logger.error(f"❌ Не удалось установить команды: {e}")
 
-    # Запускаем health-check сервер в отдельном потоке
+    # Health-check сервер (для Render.com)
     if os.getenv("RENDER"):
-        thread = Thread(target=run_server, daemon=True)
-        thread.start()
+        run_health_server()
+        logger.info("🌐 Health-check сервер запущен (порт из переменной PORT)")
 
-    logging.info("Бот запущен")
-    await dp.start_polling(bot)
+    # Graceful shutdown
+    def stop_bot(*args):
+        logger.info("🛑 Получен сигнал остановки. Завершаю бота...")
+        stop_health_server()
+        asyncio.create_task(dp.stop_polling())
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, stop_bot)
+    signal.signal(signal.SIGTERM, stop_bot)
+
+    # Запуск поллинга
+    logger.info("🎬 Бот успешно запущен и готов к работе! 🚀")
+    try:
+        await dp.start_polling(bot)
+    except Exception as e:
+        logger.critical(f"💥 Критическая ошибка при поллинге: {e}", exc_info=True)
+    finally:
+        stop_health_server()
+        logger.info("🔚 Бот остановлен.")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Бот остановлен вручную.")
+    except Exception as e:
+        logger.critical(f"💥 Необработанная ошибка в __main__: {e}")
+        sys.exit(1)

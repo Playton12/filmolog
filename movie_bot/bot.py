@@ -1,19 +1,7 @@
 """
-Экземпляр Telegram-бота.
-
-Содержит:
-- Токен из .env
-- Глобальный экземпляр `Bot`
+Глобальный экземпляр бота.
 """
-
 from aiogram import Bot
-import os
-from dotenv import load_dotenv
+from movie_bot.config import BOT_TOKEN
 
-load_dotenv()
-
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("BOT_TOKEN не установлен в .env")
-
-bot = Bot(token=TOKEN)
+bot = Bot(token=BOT_TOKEN)

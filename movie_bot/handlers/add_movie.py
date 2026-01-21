@@ -1,220 +1,242 @@
 """
-Обработчики добавления нового фильма.
-
-Пошаговый сценарий:
-1. Ввод названия
-2. Выбор жанра
-3. Ввод описания
-4. Отправка постера (или пропуск)
-
-Включает:
-- Автоисправление названий (fuzzy-поиск)
-- Проверку дубликатов
+Обработчики добавления фильма — с использованием MovieService, TextBuilder и KeyboardFactory.
 """
 
+import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
 
-from movie_bot.fsm.states import AddMovie
-from movie_bot.keyboards.genre import get_genre_keyboard
-from movie_bot.keyboards.utils import get_cancel_button, get_back_button, get_skip_poster_button, get_genre_with_navigation
-from movie_bot.database.queries import add_movie, is_movie_exists, get_all_movies
-from movie_bot.utils.helpers import get_similar_movies, clear_and_send
+from movie_bot.fsm import AddMovie
+from movie_bot.services.movie_service import MovieService
+from movie_bot.keyboards.factory import KeyboardFactory
 from movie_bot.keyboards.main_menu import get_main_menu_with_stats
+from movie_bot.utils.helpers import clear_and_send
+from movie_bot.utils.text_builder import TextBuilder
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
+# === Начало ===
+@router.message(Command("add"))
 @router.callback_query(F.data == "add")
-async def add_movie_start(callback: CallbackQuery, state: FSMContext):
+async def cmd_add(event, state: FSMContext):
     """
-    Начинает процесс добавления фильма.
+    Начинает сценарий добавления фильма.
     """
     await state.set_state(AddMovie.title)
-    await state.update_data(step=1)
-    text = (
-        "🎬 Добавление фильма\n\n"
-        "📌 Напишите название фильма.\n\n"
-        "🔖 Шаг 1 из 4"
+    await clear_and_send(
+        event,
+        TextBuilder.add_movie_step_title(),
+        KeyboardFactory.cancel(),
+        parse_mode="HTML"
     )
-    await clear_and_send(callback.message, text, get_cancel_button(), parse_mode="HTML")
-    await callback.answer()
 
 
+# === Ввод названия ===
 @router.message(AddMovie.title)
 async def add_title(message: Message, state: FSMContext):
     """
-    Обрабатывает ввод названия фильма.
+    Обрабатывает ввод названия.
+    Проверяет на пустоту, похожие и дубликаты.
     """
     if not message.text or not message.text.strip():
-        await message.answer("❌ Название не может быть пустым.", reply_markup=get_cancel_button())
+        await message.answer(TextBuilder.err_title_empty(), reply_markup=KeyboardFactory.cancel())
         return
 
     user_input = message.text.strip()
     user_id = message.from_user.id
-    user_movies = await get_all_movies(user_id=user_id, watched=None)
 
-    # Проверка похожих названий
-    similar_list = get_similar_movies(user_movies, user_input, threshold=75)
-    best_match = similar_list[0] if similar_list else None
-
-    if best_match:
-        await state.update_data(title=user_input)
+    # Поиск похожих
+    similar = await MovieService.find_similar(user_id, user_input)
+    if similar:
+        match = similar[0]
+        kb = KeyboardFactory.confirmation(
+            yes_callback=f"auto_correct:{match}",
+            no_callback="auto_skip_correction"
+        )
         await message.answer(
-            f"🔍 Возможно, вы имели в виду: {best_match}?\n\n"
-            f"Вы написали: <i>{user_input}</i>\n\n"
-            "Исправить?",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Да", callback_data=f"auto_correct:{best_match}")],
-                [InlineKeyboardButton(text="❌ Нет", callback_data="auto_skip_correction")],
-            ]),
+            TextBuilder.suggest_correction(input=user_input, match=match),
+            reply_markup=kb,
             parse_mode="HTML"
         )
+        await state.update_data(title=user_input)
         return
 
-    # Проверка точного совпадения
-    if await is_movie_exists(user_id, user_input):
-        await state.update_data(title=user_input)
+    # Проверка дубликата
+    if await MovieService.exists(user_id, user_input):
+        kb = KeyboardFactory.confirmation(
+            yes_callback="confirm_duplicate_yes",
+            no_callback="confirm_duplicate_no"
+        )
         await message.answer(
-            f"⚠️ Фильм <i>«{user_input}»</i> уже есть в вашей библиотеке.\n\n"
-            "Добавить повторно?",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✅ Да", callback_data="confirm_duplicate_yes")],
-                [InlineKeyboardButton(text="❌ Нет", callback_data="confirm_duplicate_no")]
-            ]),
+            TextBuilder.confirm_duplicate(title=user_input),
+            reply_markup=kb,
             parse_mode="HTML"
         )
+        await state.update_data(title=user_input)
         return
 
-    await state.update_data(title=user_input, step=2)
-    await state.set_state(AddMovie.genre)
-    await message.answer(
-        "🎭 Выберите жанр\n\n"
-        "🔖 Шаг 2 из 4",
-        reply_markup=get_genre_with_navigation()
-    )
+    # Сохраняем и переходим к жанру
+    await state.update_data(title=user_input)
+    await goto_genre_step(message, state)
 
 
-@router.callback_query(F.data.startswith("auto_correct:"))
-async def auto_correct_title(callback: CallbackQuery, state: FSMContext):
-    corrected_title = callback.data.split(":", 1)[1]
-    await state.update_data(title=corrected_title, step=2)
+# === Переход к жанру ===
+async def goto_genre_step(event, state: FSMContext):
+    """
+    Отправляет шаг выбора жанра.
+    Поддерживает Message и CallbackQuery.
+    """
     await state.set_state(AddMovie.genre)
     await clear_and_send(
-        callback.message,
-        "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
-        get_genre_with_navigation(),
+        event,
+        TextBuilder.add_movie_step_genre(),
+        KeyboardFactory.genre("add"),
         parse_mode="HTML"
     )
-    await callback.answer()
 
 
-@router.callback_query(F.data == "auto_skip_correction")
-async def auto_skip_correction(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await state.update_data(step=2)
-    await state.set_state(AddMovie.genre)
-    await clear_and_send(
-        callback.message,
-        "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
-        get_genre_with_navigation(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
+# === Выбор жанра ===
 @router.callback_query(AddMovie.genre, F.data.startswith("add_genre:"))
 async def add_genre_callback(callback: CallbackQuery, state: FSMContext):
-    genre = callback.data.split(":", 1)[1]
-    await state.update_data(genre=genre, step=3)
-    await state.set_state(AddMovie.description)
-    await clear_and_send(
-        callback.message,
-        "📝 Напишите описание\n\n🔖 Шаг 3 из 4",
-        get_back_button(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    """
+    Обрабатывает выбор жанра.
+    """
+    try:
+        genre = callback.data.split(":", 1)[1]
+        await state.update_data(genre=genre)
+        await state.set_state(AddMovie.description)
+        await clear_and_send(
+            callback.message,
+            TextBuilder.add_movie_step_description(),
+            KeyboardFactory.back(),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"[add_movie] Ошибка при выборе жанра: {e}")
+        await callback.answer("❌ Ошибка при выборе жанра.", show_alert=True)
 
 
+# === Назад ===
 @router.callback_query(F.data == "back_step")
 async def back_to_previous_field(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+    """
+    Возвращает к предыдущему шагу.
+    """
     current_state = await state.get_state()
 
     if current_state == AddMovie.description:
-        await state.set_state(AddMovie.genre)
-        await clear_and_send(
-            callback.message,
-            "🎭 Выберите жанр\n\n🔖 Шаг 2 из 4",
-            get_genre_with_navigation(),
-            parse_mode="HTML"
-        )
+        await goto_genre_step(callback, state)
     elif current_state == AddMovie.genre:
         await state.set_state(AddMovie.title)
         await clear_and_send(
             callback.message,
-            "🎬 Введите название фильма\n\n🔖 Шаг 1 из 4",
-            get_cancel_button(),
+            TextBuilder.add_movie_step_title(),
+            KeyboardFactory.cancel(),
             parse_mode="HTML"
         )
     elif current_state == AddMovie.poster:
         await state.set_state(AddMovie.description)
         await clear_and_send(
             callback.message,
-            "📝 Напишите описание\n\n🔖Шаг 3 из 4",
-            get_back_button(),
+            TextBuilder.add_movie_step_description(),
+            KeyboardFactory.back(),
             parse_mode="HTML"
         )
     else:
-        await callback.answer("❌ Вы уже в начале.")
+        await callback.answer(TextBuilder.err_already_at_start(), show_alert=True)
 
     await callback.answer()
 
 
+# === Описание ===
 @router.message(AddMovie.description)
 async def add_description(message: Message, state: FSMContext):
+    """
+    Обрабатывает ввод описания.
+    """
     if not message.text or not message.text.strip():
-        await message.answer("❌ Описание не может быть пустым.", reply_markup=get_back_button())
+        await message.answer(TextBuilder.err_description_empty(), reply_markup=KeyboardFactory.back())
         return
-    await state.update_data(description=message.text.strip(), step=4)
+
+    await state.update_data(description=message.text.strip())
     await state.set_state(AddMovie.poster)
     await message.answer(
-        "🖼 Пришлите постер или нажмите «Пропустить»\n\n🔖 Шаг 4 из 4",
-        reply_markup=get_skip_poster_button()
-    )
+    TextBuilder.add_movie_step_poster(),
+    reply_markup=KeyboardFactory.skip_poster(),
+    parse_mode="HTML"
+)
 
 
+# === Постер или пропуск ===
 @router.message(AddMovie.poster, F.photo)
 async def add_poster_photo(message: Message, state: FSMContext):
+    """
+    Обрабатывает загрузку постера.
+    """
     data = await state.get_data()
-    await add_movie(
-        user_id=message.from_user.id,
-        title=data["title"],
-        genre=data["genre"],
-        description=data["description"],
-        poster_id=message.photo[-1].file_id
-    )
-    await state.clear()
-    keyboard = await get_main_menu_with_stats(message.from_user.id)
-    await message.answer("🎉 Фильм успешно добавлен!", reply_markup=keyboard, parse_mode="HTML")
+    try:
+        await MovieService.create(
+            user_id=message.from_user.id,
+            title=data["title"],
+            genre=data["genre"],
+            description=data["description"],
+            poster_id=message.photo[-1].file_id
+        )
+        await finish_addition(message, message.from_user.id)
+        await state.clear()
+    except Exception as e:
+        logger.error(f"[add_movie] Ошибка при добавлении с постером: {e}")
+        await message.answer("❌ Ошибка при сохранении. Попробуйте снова.")
+        await state.clear()
 
 
 @router.callback_query(AddMovie.poster, F.data == "skip_poster")
 async def skip_poster(callback: CallbackQuery, state: FSMContext):
+    """
+    Обрабатывает пропуск постера.
+    """
     data = await state.get_data()
-    await add_movie(
-        user_id=callback.from_user.id,
-        title=data["title"],
-        genre=data["genre"],
-        description=data["description"]
-    )
-    await state.clear()
-    await clear_and_send(
-        callback.message,
-        "🎉 Фильм успешно добавлен!",
-        await get_main_menu_with_stats(callback.from_user.id),
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    try:
+        await MovieService.create(
+            user_id=callback.from_user.id,
+            title=data["title"],
+            genre=data["genre"],
+            description=data["description"]
+        )
+        await finish_addition(callback.message, callback.from_user.id)
+        await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"[add_movie] Ошибка при добавлении без постера: {e}")
+        await callback.message.answer("❌ Ошибка при сохранении.")
+        await state.clear()
+        await callback.answer()
+
+
+# === Завершение ===
+async def finish_addition(event, user_id: int):
+    """
+    Завершает процесс добавления: показывает успех и главное меню.
+    """
+    try:
+        stats_text, keyboard = await get_main_menu_with_stats(user_id)
+        await clear_and_send(
+            event,
+            TextBuilder.success_add(),
+            keyboard,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"[add_movie] Ошибка при завершении добавления: {e}")
+        # Fallback
+        await clear_and_send(
+            event,
+            TextBuilder.success_add(),
+            KeyboardFactory.main_menu(),
+            parse_mode="HTML"
+        )

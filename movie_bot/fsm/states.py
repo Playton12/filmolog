@@ -1,17 +1,17 @@
 """
-Состояния для машины состояний (FSM).
+Состояния FSM для бота управления фильмами.
 
-Определяет пошаговые сценарии:
-- Добавление фильма
-- Редактирование
-- Пользовательские состояния
+Каждая группа — отдельный сценарий.
+Имя состояния включает контекст (например, add_movie_title), чтобы избежать путаницы.
 """
 
 from aiogram.fsm.state import StatesGroup, State
 
 
 class AddMovie(StatesGroup):
-    """Состояния для добавления нового фильма."""
+    """
+    Состояния сценария: добавление нового фильма.
+    """
     title = State()
     genre = State()
     description = State()
@@ -19,7 +19,9 @@ class AddMovie(StatesGroup):
 
 
 class EditMovie(StatesGroup):
-    """Состояния для редактирования фильма."""
+    """
+    Состояния сценария: редактирование существующего фильма.
+    """
     title = State()
     genre = State()
     description = State()
@@ -27,12 +29,26 @@ class EditMovie(StatesGroup):
     confirm = State()
 
 
-class UserStates(StatesGroup):
-    """Глобальные состояния пользователя."""
-    started = State()
-
-
 class MyMovies(StatesGroup):
-    """Состояния для просмотра своих фильмов."""
-    search = State()
-    pagination = State()  # Для будущих улучшений
+    """
+    Состояния для просмотра и поиска фильмов.
+    """
+    search_query = State()
+    # pagination — зарезервировано (например, waiting_page)
+
+
+class User(StatesGroup):
+    """
+    Глобальные состояния пользователя (если понадобятся).
+    """
+    # Пример: waiting_for_feedback, choosing_language
+    pass
+
+
+# Явный экспорт
+__all__ = [
+    "AddMovie",
+    "EditMovie",
+    "MyMovies",
+    "User",
+]

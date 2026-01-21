@@ -3,54 +3,50 @@
 Показывает описание всех функций бота с кнопкой возврата.
 """
 
+import logging
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
-from movie_bot.keyboards.main_menu import get_main_menu_with_stats
+from aiogram.exceptions import TelegramForbiddenError
+
+from movie_bot.keyboards.factory import KeyboardFactory
+from movie_bot.utils.text_builder import TextBuilder
 
 router = Router()
+logger = logging.getLogger(__name__)
 
-HELP_TEXT = """
-🤖 <b>Добро пожаловать в бот для управления фильмами!</b>
+async def send_help(event, user_id: int):
+    """
+    Универсально отправляет справку — поддерживает Message и CallbackQuery.
+    """
+    text = TextBuilder.help_text()
+    keyboard = KeyboardFactory.back_to_main()
 
-📌 Вот что я умею:
-
-🎬 <code>/add</code> — <b>Добавить фильм</b>
-   Укажите название, жанр, описание и пришлите постер
-
-🎯 <code>/recommend</code> — <b>Рекомендация</b>
-   Получите случайный непросмотренный фильм
-
-📂 <code>/my_movies</code> — <b>Мои фильмы</b>
-   Просмотр всех, поиск, фильтры: просмотренные / непросмотренные
-
-🔄 <code>/restart</code> — <b>Перезапустить бот</b>
-   Сброс состояния, если что-то пошло не так
-
-🛠 <i>Совет: используйте /restart, если бот не отвечает или завис</i>
-
-💬 Бот помогает вести учёт фильмов и не забыть ни одного просмотра.
-Приятного использования! 🍿
-"""
-
-# Клавиатура с кнопкой возврата
-back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🔙 Назад в главное меню", callback_data="back_main")]
-])
-
+    try:
+        if isinstance(event, Message):
+            await event.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        elif isinstance(event, CallbackQuery):
+            await event.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramForbiddenError:
+        logger.warning(f"Бот заблокирован пользователем {user_id}. Не могу отправить /help.")
+    except Exception as e:
+        logger.error(f"[help] Ошибка при отправке справки пользователю {user_id}: {e}")
+        if isinstance(event, CallbackQuery):
+            await event.answer("❌ Не удалось открыть справку.", show_alert=True)
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     """
-    Отправляет справку с кнопкой возврата.
+    Обрабатывает команду /help.
     """
-    await message.answer(HELP_TEXT, reply_markup=back_keyboard, parse_mode="HTML")
-
+    await send_help(message, message.from_user.id)
+    logger.info(f"Пользователь {message.from_user.id} вызвал /help")
 
 @router.callback_query(F.data == "help")
 async def help_callback(callback: CallbackQuery):
     """
-    Обработчик кнопки "Помощь" — показывает справку с кнопкой.
+    Обрабатывает нажатие кнопки "Помощь".
     """
-    await callback.message.edit_text(HELP_TEXT, reply_markup=back_keyboard, parse_mode="HTML")
+    await send_help(callback, callback.from_user.id)
     await callback.answer()
+    logger.info(f"Пользователь {callback.from_user.id} открыл помощь через кнопку")

@@ -306,7 +306,7 @@ class TextBuilder:
         genre = movie['genre']
         description = movie['description'] or "Без описания"
         return (
-            f"<b>🎬 Рекомендую: {title}</b>\n"
+            f"<b>🎬 Советую посмотреть: {title}</b>\n"
             f"<i>Жанр: {genre}</i>\n\n"
             f"{description}"
         )

@@ -5,6 +5,7 @@
 
 from datetime import datetime
 from typing import Optional
+from movie_bot.utils.text_utils import pluralize
 
 
 class TextBuilder:
@@ -52,41 +53,65 @@ class TextBuilder:
         """
         lines = [
             f"🎬 <b>{movie['title']}</b>",
-            "",
-            f"🎭 <b>Жанр:</b> <i>{movie['genre']}</i>",
             ""
         ]
 
-        description = movie["description"] or "Описание отсутствует."
+        # Жанр
+        genre_emoji = {
+            "Фильм": "🎬",
+            "Сериал": "📺",
+            "Аниме": "🌸",
+            "Мультфильм": "🎨"
+        }.get(movie['genre'], "📌")
+
+        lines.append(f"{genre_emoji} <b>Жанр:</b> <i>{movie['genre']}</i>")
+        lines.append("")
+
+        # Описание
+        description = movie["description"] or "ℹ️ Описание не добавлено."
         if len(description) > 200:
             description = description[:197] + "..."
         lines.append(f"📝 <b>Описание:</b>\n<i>{description}</i>")
         lines.append("")
 
-        lines.append(f"📌 <b>Добавлен:</b> <i>{TextBuilder.format_date(movie.get('added_at'))}</i>")
-
-        if movie["watched"] and movie.get("watched_at"):
-            lines.append(f"✅ <b>Просмотрен:</b> <i>{TextBuilder.format_date(movie['watched_at'])}</i>")
-        elif movie["watched"]:
-            lines.append("✅ <b>Просмотрен:</b> <i>дата неизвестна</i>")
+        # Дата добавления
+        added_at = movie.get("added_at")
+        if added_at:
+            formatted_date = TextBuilder.format_date(added_at)
+            lines.append(f"➕ <b>Добавлен:</b> <i>{formatted_date}</i>")
         else:
-            lines.append("⭕ <b>Статус:</b> <i>не просмотрен</i>")
+            lines.append("➕ <b>Добавлен:</b> <i>неизвестно</i>")
+        lines.append("")
+
+        # Статус просмотра
+        if movie["watched"]:
+            watched_at = movie.get("watched_at")
+            if watched_at:
+                formatted_date = TextBuilder.format_date(watched_at)
+                lines.append(f"✅ <b>Просмотрен:</b> <i>{formatted_date}</i>")
+            else:
+                lines.append("✅ <b>Просмотрен:</b> <i>дата не зафиксирована</i>")
+        else:
+            lines.append("🟡 <b>Статус:</b> <i>в планах</i>")
 
         return "\n".join(lines)
 
     # 📊 Статистика в меню
     @staticmethod
     def main_menu_stats(total: int, watched: int) -> str:
-        """
-        Генерирует текст статистики для главного меню.
-        """
-        if total == 0:
-            return "📭 Пока нет фильмов"
+        unwatched = total - watched
+        total_word = pluralize(total, ("фильм", "фильма", "фильмов"))
+        watched_word = pluralize(watched, ("просмотрен", "просмотрено", "просмотрено"))
+        unwatched_word = pluralize(unwatched, ("остался", "осталось", "осталось"))
 
-        progress = (watched / total) * 100
+        if total == 0:
+            return "📭 Пока нет контента"
+
+        progress = (watched / total) * 100 if total > 0 else 0
         bar = "🟩" * int(progress // 10) + "◽️" * (10 - int(progress // 10))
+
         return (
-            f"📚 <b>{total}</b> фильмов | ✅ <b>{watched}</b> просмотрено\n"
+            f"📚 <b>{total}</b> {total_word} | ✅ <b>{watched}</b> {watched_word}\n"
             f"📊 Прогресс: {bar} {int(progress)}%"
         )
 
@@ -101,10 +126,10 @@ class TextBuilder:
 
 📌 Вы можете использовать команды:
 
-🎬 /add — Добавить фильм  
+🎬 /add — Добавить контент
 🎯 /recommend — Получить рекомендацию  
-📂 /my_movies — Мои фильмы  
-🔄 /restart — Перезапустить бот  
+📂 /my_movies — Мой контент  
+🔄 /restart — Перезапустить   
 ℹ️ /help — Показать это сообщение
 
 💡 Нажмите на команду — она выполнится!
@@ -298,7 +323,7 @@ class TextBuilder:
 
     @staticmethod
     def recommend_no_movies_in_genre(genre: str) -> str:
-        return f"🤷‍♂️ В жанре *{genre}* пока нет непросмотренного контента."
+        return f"🤷‍♂️ В жанре <b>{genre}</b> пока нет непросмотренного контента."
 
     @staticmethod
     def recommend_movie_caption(movie) -> str:

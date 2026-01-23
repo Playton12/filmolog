@@ -12,6 +12,7 @@ fuzzywuzzy==0.18.0
 idna==3.11
 Levenshtein==0.27.3
 magic-filter==1.0.12
+-e git+https://github.com/Playton12/filmolog.git@716eb280548ec5e83efe114fcbb516abc2d7a8c0#egg=movie_bot
 multidict==6.7.0
 propcache==0.4.1
 pydantic==2.12.5

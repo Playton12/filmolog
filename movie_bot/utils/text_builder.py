@@ -232,8 +232,8 @@ class TextBuilder:
 
     # 🧠 Подсказки
     @staticmethod
-    def suggest_correction(input: str, match: str) -> str:
-        return f"🔍 Возможно, вы имели в виду: <b>{match}</b>?\n\nВы написали: <i>{input}</i>\n\nИсправить?"
+    def suggest_correction(user_input: str, match: str) -> str:
+        return f"🔍 Возможно, вы имели в виду: <b>{match}</b>?\n\nВы написали: <i>{user_input}</i>\n\nИсправить?"
 
     @staticmethod
     def confirm_duplicate(title: str) -> str:

@@ -58,7 +58,7 @@ async def add_title(message: Message, state: FSMContext):
             no_callback="auto_skip_correction"
         )
         await message.answer(
-            TextBuilder.suggest_correction(input=user_input, match=match),
+            TextBuilder.suggest_correction(user_input=user_input, match=match),
             reply_markup=kb,
             parse_mode="HTML"
         )

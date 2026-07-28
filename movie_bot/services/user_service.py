@@ -3,8 +3,8 @@
 Содержит бизнес-логику, связанную с профилем и статистикой.
 """
 
-from typing import Dict, Optional
-from movie_bot.services.movie_service import MovieService
+from typing import Dict
+from movie_bot.database.queries import get_user_stats
 
 
 class UserService:
@@ -15,20 +15,9 @@ class UserService:
     @staticmethod
     async def get_stats(user_id: int) -> Dict[str, int]:
         """
-        Получить статистику пользователя: общее количество, просмотренные, непросмотренные.
+        Получить статистику пользователя через SQL COUNT.
 
         :param user_id: ID пользователя
-        :return: Словарь с ключами: total, watched, unwatched
+        :return: Словарь с ключами: total, watched
         """
-        movies = await MovieService.get_all(user_id=user_id, watched=None)
-
-        watched = 0
-        for movie in movies:
-            if movie["watched"]:
-                watched += 1
-        total = len(movies)
-
-        return {
-            "total": total,
-            "watched": watched,
-        }
+        return await get_user_stats(user_id)

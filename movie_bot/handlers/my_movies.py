@@ -21,6 +21,19 @@ from movie_bot.config import ITEMS_PER_PAGE
 router = Router()
 logger = logging.getLogger(__name__)
 
+_TOGGLE_KEYWORDS = ("Пометить", "Смотреть")
+
+
+def _patch_watched_button(keyboard, movie_id: int, source: str, watched: bool):
+    """Подменяет текст и callback_data у кнопки toggle_watched в клавиатуре."""
+    toggle_text = TextBuilder.btn_toggle_watched(watched)
+    toggle_callback = f"toggle_watched:{movie_id}:{source}"
+    for row in keyboard.inline_keyboard:
+        for btn in row:
+            if any(kw in btn.text for kw in _TOGGLE_KEYWORDS):
+                btn.text = toggle_text
+                btn.callback_data = toggle_callback
+
 @router.message(Command("my_movies"))
 @router.callback_query(F.data == "my_movies")
 async def my_movies_menu(event, state: FSMContext):
@@ -182,16 +195,7 @@ async def send_movie_card(event, movie_id: int, source: str = "my_movies"):
 
     text = TextBuilder.movie_card(movie)
     keyboard = KeyboardFactory.movie_actions(source=source, watched=movie["watched"], movie_id=movie["id"])
-
-    toggle_text = TextBuilder.btn_toggle_watched(not movie["watched"])
-    toggle_callback = f"toggle_watched:{movie_id}:{source}"
-
-    # Обновляем текст и callback кнопки
-    for row in keyboard.inline_keyboard:
-        for btn in row:
-            if "Пометить" in btn.text or "Смотреть" in btn.text:
-                btn.text = toggle_text
-                btn.callback_data = toggle_callback
+    _patch_watched_button(keyboard, movie_id, source, not movie["watched"])
 
     try:
         if movie.get("poster_id"):
@@ -233,15 +237,7 @@ async def toggle_watched_status(callback: CallbackQuery):
 
         text = TextBuilder.movie_card(updated)
         keyboard = KeyboardFactory.movie_actions(source=source, watched=new_watched, movie_id=movie["id"])
-
-        toggle_text = TextBuilder.btn_toggle_watched(not new_watched)
-        toggle_callback = f"toggle_watched:{movie_id}:{source}"
-
-        for row in keyboard.inline_keyboard:
-            for btn in row:
-                if "Пометить" in btn.text or "Смотреть" in btn.text:
-                    btn.text = toggle_text
-                    btn.callback_data = toggle_callback
+        _patch_watched_button(keyboard, movie_id, source, not new_watched)
 
         if movie.get("poster_id"):
             await callback.message.edit_caption(

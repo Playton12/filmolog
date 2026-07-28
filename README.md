@@ -13,14 +13,35 @@ Telegram-бот для управления коллекцией фильмов,
 - 📊 Статистика и прогресс
 - 🔍 Поиск и редактирование
 - 🗑 Умное удаление с подтверждением
-- 🌐 Адаптирован под [Render.com](https://render.com) (с health-check)
+- 🌐 Деплой на [Fly.io](https://fly.io) с persistent volume для БД
 
 ## 🛠 Технологии
-- Python 3.10+ 
-- aiogram 3 — Telegram-фреймворк 
+- Python 3.12
+- aiogram 3 — Telegram-фреймворк
 - aiosqlite — асинхронная SQLite
-- fuzzywuzzy — поиск похожих названий
-- logging — логирование
-- Render.com — бесплатный хостинг
+- thefuzz — нечёткий поиск названий
+- Fly.io — хостинг с persistent volume
+
+## 🚀 Деплой на Fly.io
+
+```bash
+# 1. Установить flyctl
+curl -L https://fly.io/install.sh | sh
+
+# 2. Авторизоваться
+fly auth login
+
+# 3. Создать приложение
+fly launch
+
+# 4. Создать persistent volume для БД
+fly volumes create data --region ams --size 1
+
+# 5. Задать токен бота
+fly secrets set BOT_TOKEN=your_token_here
+
+# 6. Задеплоить
+fly deploy
+```
 
 ## Создан с ❤️ для киноманов

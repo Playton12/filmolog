@@ -189,6 +189,28 @@ async def update_movie(user_id: int, movie_id: int, **kwargs):
         await db.commit()
         logger.info(f"Фильм обновлён: {movie_id} | user_id={user_id} | Поля: {valid_keys}")
 
+async def get_user_stats(user_id: int) -> Dict[str, int]:
+    """
+    Возвращает статистику пользователя: total и watched.
+    Использует COUNT — не загружает все строки в память.
+    """
+    async with get_db() as db:
+        async with db.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END) AS watched
+            FROM movies
+            WHERE user_id = ?
+            """,
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            total = row["total"] or 0
+            watched = row["watched"] or 0
+            return {"total": total, "watched": watched}
+
+
 __all__ = [
     "get_all_movies",
     "get_movies_by_genre",
@@ -198,4 +220,5 @@ __all__ = [
     "is_movie_exists",
     "mark_movie_watched",
     "update_movie",
+    "get_user_stats",
 ]

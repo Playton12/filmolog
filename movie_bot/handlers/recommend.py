@@ -6,10 +6,11 @@
 import logging
 import random
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 from aiogram.filters import Command
 
-from movie_bot.keyboards.genre import get_genre_keyboard, GENRES
+from movie_bot.keyboards.genre import GENRES
+from movie_bot.keyboards.factory import KeyboardFactory
 from movie_bot.database import get_movies_by_genre
 from movie_bot.keyboards.main_menu import get_main_menu_with_stats
 from movie_bot.utils.helpers import clear_and_send
@@ -27,7 +28,7 @@ async def recommend_menu(event):
     await clear_and_send(
         event,
         TextBuilder.recommend_choose_genre(),
-        get_genre_keyboard("rec"),
+        KeyboardFactory.genre("rec"),
         parse_mode="HTML"
     )
 
@@ -60,24 +61,22 @@ async def recommend_by_genre(callback: CallbackQuery):
     # Случайный фильм
     movie = random.choice(movies)
     caption = TextBuilder.recommend_movie_caption(movie)
+    keyboard = (await get_main_menu_with_stats(user_id))[1]
 
     try:
-
-        poster_id = movie["poster_id"] if movie["poster_id"] else None
-
-        if poster_id:
+        if movie["poster_id"]:
             await clear_and_send(callback.message, TextBuilder.loading(), None)
             await callback.message.answer_photo(
                 photo=movie["poster_id"],
                 caption=caption,
                 parse_mode="HTML",
-                reply_markup=(await get_main_menu_with_stats(user_id))[1]
+                reply_markup=keyboard
             )
         else:
             await clear_and_send(
                 callback.message,
                 caption,
-                (await get_main_menu_with_stats(user_id))[1],
+                keyboard,
                 parse_mode="HTML"
             )
     except Exception as e:

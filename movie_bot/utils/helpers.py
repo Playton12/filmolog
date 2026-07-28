@@ -5,7 +5,7 @@ from aiogram.exceptions import (
     TelegramForbiddenError,
     TelegramBadRequest  # ← Единственное исключение, которое нужно
 )
-from fuzzywuzzy import fuzz
+from thefuzz import fuzz
 import logging
 
 logger = logging.getLogger(__name__)

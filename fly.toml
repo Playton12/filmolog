@@ -1,0 +1,11 @@
+app = "filmolog"
+primary_region = "ams"
+
+[build]
+
+[env]
+  PYTHON_VERSION = "3.12"
+
+[mounts]
+  source = "data"
+  destination = "/data"

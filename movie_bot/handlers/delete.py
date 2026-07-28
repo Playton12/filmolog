@@ -90,7 +90,7 @@ async def _send_movie_not_found(callback: CallbackQuery):
 async def _send_deletion_success(callback: CallbackQuery, title: str, source: str):
     user_id = callback.from_user.id
     try:
-        # Определим, куда возвращаться
+        view = "all"
         if "watched" in source:
             movies = await get_all_movies(user_id=user_id, watched=True)
             view = "watched"
@@ -99,7 +99,6 @@ async def _send_deletion_success(callback: CallbackQuery, title: str, source: st
             view = "unwatched"
         else:
             movies = await get_all_movies(user_id=user_id, watched=None)
-            view = "all"
 
         if not movies:
             await clear_and_send(
@@ -109,14 +108,7 @@ async def _send_deletion_success(callback: CallbackQuery, title: str, source: st
                 parse_mode="HTML"
             )
         else:
-            # Возвращаемся к списку
-            page = 0
-            if "watched" in source:
-                await send_movie_page(callback, movies, page, "watched", ITEMS_PER_PAGE)
-            elif "unwatched" in source:
-                await send_movie_page(callback, movies, page, "unwatched", ITEMS_PER_PAGE)
-            else:
-                await send_movie_page(callback, movies, page, "all", ITEMS_PER_PAGE)
+            await send_movie_page(callback, movies, 0, view, ITEMS_PER_PAGE)
     except Exception as e:
         logger.error(f"[delete] Ошибка при показе списка после удаления: {e}")
         stats_text, kb = await get_main_menu_with_stats(user_id)

@@ -10,11 +10,10 @@ from aiogram.fsm.context import FSMContext
 
 from movie_bot.fsm import EditMovie  
 from movie_bot.keyboards.factory import KeyboardFactory
-from movie_bot.database import get_movie_by_id, update_movie, get_all_movies 
+from movie_bot.database import get_movie_by_id, update_movie, get_all_movies
 from movie_bot.utils.helpers import get_similar_movies, clear_and_send
 from movie_bot.keyboards.main_menu import get_main_menu_with_stats
 from movie_bot.utils.text_builder import TextBuilder
-from movie_bot.keyboards.factory import KeyboardFactory
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -132,7 +131,7 @@ async def edit_title(message: Message, state: FSMContext):
             no_callback="edit_skip_correct"
         )
         await message.answer(
-            TextBuilder.suggest_correction(input=user_input, match=best_match),
+            TextBuilder.suggest_correction(user_input=user_input, match=best_match),
             reply_markup=kb,
             parse_mode="HTML"
         )
@@ -206,8 +205,7 @@ async def back_to_edit_fields(callback: CallbackQuery, state: FSMContext):
     await clear_and_send(
         callback.message,
         f"🔧 Редактирование: <b>{movie['title']}</b>\n\nВыберите поле:",
-        KeyboardFactory.edit_menu()
-,
+        KeyboardFactory.edit_menu(),
         parse_mode="HTML"
     )
     await state.set_state(EditMovie.title)
@@ -322,8 +320,7 @@ async def confirm_edit_no(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     movie = await get_movie_by_id(callback.from_user.id, data["movie_id"])
     text = "❌ Изменение отменено.\n\n" + TextBuilder.movie_card(movie)
-    await clear_and_send(callback.message, text, KeyboardFactory.edit_menu()
-, parse_mode="HTML")
+    await clear_and_send(callback.message, text, KeyboardFactory.edit_menu(), parse_mode="HTML")
     await state.set_state(EditMovie.title)
     await callback.answer()
 
